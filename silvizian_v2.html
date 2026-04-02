@@ -1,0 +1,2115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Silvizian | Cloud 3D</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --glass-bg: rgba(20, 30, 60, 0.6);
+            --glass-border: rgba(255, 255, 255, 0.25);
+            --text-primary: rgba(255, 255, 255, 0.95);
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --accent: #667eea;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            overflow-x: hidden;
+            background: #000;
+            color: var(--text-primary);
+        }
+        
+        /* Smooth scrolling */
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        body::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        body::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.1);
+        }
+        
+        body::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.3);
+            border-radius: 4px;
+        }
+        
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            transition: filter 1s ease;
+        }
+        
+        .glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        body.no-blur .glass {
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+            background: rgba(10, 18, 40, 0.9);
+        }
+        
+        /* UI Layer - scrollable */
+        .ui-layer {
+            position: relative;
+            z-index: 10;
+            min-height: 100vh;
+        }
+        
+        /* Dock */
+        .dock {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px;
+            display: flex;
+            gap: 12px;
+            border-radius: 20px;
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+        
+        .dock-item {
+            width: 50px;
+            height: 50px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.25), rgba(255,255,255,0.05));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        background 0.25s ease,
+                        box-shadow 0.25s ease;
+            border: 1px solid rgba(255,255,255,0.3);
+            font-size: 22px;
+            position: relative;
+        }
+        
+        .dock-item:hover {
+            transform: scale(1.2) translateY(-7px);
+            background: rgba(255,255,255,0.4);
+            box-shadow: 0 8px 25px rgba(102,126,234,0.4);
+        }
+        
+        .dock-item.active {
+            background: rgba(255,255,255,0.5);
+        }
+        
+        .dock-item.active::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            width: 4px;
+            height: 4px;
+            background: white;
+            border-radius: 50%;
+        }
+        
+        .dock-divider {
+            width: 1px;
+            height: 40px;
+            background: rgba(255,255,255,0.2);
+            margin: 5px;
+        }
+        
+        /* SECTIONS */
+        .section {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 100px 20px;
+            position: relative;
+        }
+        
+        .section-hidden {
+            display: none !important;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px) scale(0.98); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .section-visible {
+            animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+
+        /* Staggered children animation when section appears */
+        .section-visible > * > * {
+            animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        .section-visible > * > *:nth-child(1) { animation-delay: 0.05s; }
+        .section-visible > * > *:nth-child(2) { animation-delay: 0.10s; }
+        .section-visible > * > *:nth-child(3) { animation-delay: 0.15s; }
+        .section-visible > * > *:nth-child(4) { animation-delay: 0.20s; }
+        .section-visible > * > *:nth-child(5) { animation-delay: 0.25s; }
+        .section-visible > * > *:nth-child(6) { animation-delay: 0.30s; }
+        
+        /* HOME SECTION */
+        .home-content {
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+            margin: 0 auto 30px;
+        }
+        
+        .avatar-container {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 25px;
+            animation: float 6s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%   { transform: translateY(0px) rotate(0deg); }
+            30%  { transform: translateY(-12px) rotate(2deg); }
+            60%  { transform: translateY(-6px) rotate(-1deg); }
+            100% { transform: translateY(0px) rotate(0deg); }
+        }
+        
+        .avatar-glow {
+            position: absolute;
+            inset: -20px;
+            background: image
+            border-radius: 50%;
+            animation: pulse-glow 3s ease-in-out infinite;
+        }
+        
+        @keyframes pulse-glow {
+            0%, 100% { transform: scale(1);   opacity: 0.5; }
+            50%       { transform: scale(1.4); opacity: 1; }
+        }
+        
+        .avatar {
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent) 0%, #764ba2 100%);
+            border: 3px solid rgba(255,255,255,0.6);
+            box-shadow: 0 0 50px rgba(102,126,234,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 44px;
+            font-weight: 700;
+            color: white;
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease;
+            overflow: hidden;
+        }
+        
+        .avatar:hover {
+            transform: scale(1.12) rotate(6deg);
+            box-shadow: 0 0 70px rgba(102,126,234,0.95);
+        }
+        
+        .username {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            letter-spacing: 2px;
+        }
+        
+        .handle {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+        
+        .bio {
+            color: var(--text-secondary);
+            line-height: 1.7;
+            font-size: 0.95rem;
+            font-style: italic;
+        }
+        
+        .divider {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin: 25px 0;
+        }
+        
+        .divider-line {
+            height: 1px;
+            width: 80px;
+            background: linear-gradient(to right, transparent, rgba(255,255,255,0.6), transparent);
+        }
+        
+        .divider-dot {
+            width: 8px;
+            height: 8px;
+            background: white;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(255,255,255,0.8);
+            animation: pulse-dot 2s infinite;
+        }
+        
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 0.4; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+        
+        /* Dropdowns */
+        .dropdown-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 25px;
+        }
+        
+        .dropdown {
+            border-radius: 16px;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+        
+        .dropdown-header {
+            width: 100%;
+            padding: 18px 22px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: transparent;
+            border: none;
+            color: white;
+            font-family: inherit;
+        }
+        
+        .dropdown-header:hover { background: rgba(255,255,255,0.1); }
+        
+        .dropdown-title {
+            font-size: 1.05rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+        
+        .dropdown-arrow {
+            width: 20px;
+            height: 20px;
+            transition: transform 0.3s;
+            color: rgba(255,255,255,0.8);
+        }
+        
+        .dropdown.open .dropdown-arrow { transform: rotate(180deg); }
+        
+        .dropdown-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease, opacity 0.3s ease;
+            opacity: 0;
+        }
+        
+        .dropdown.open .dropdown-content {
+            max-height: 600px;
+            opacity: 1;
+        }
+        
+        .dropdown-links {
+            padding: 0 15px 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .link-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 18px;
+            border-radius: 12px;
+            text-decoration: none;
+            color: white;
+            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        background 0.25s ease,
+                        border-color 0.25s ease,
+                        box-shadow 0.25s ease;
+            position: relative;
+            overflow: hidden;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.12);
+        }
+
+        .link-item::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(102,126,234,0.1), rgba(118,75,162,0.1));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        .link-item:hover::before { opacity: 1; }
+
+        .link-item:hover {
+            transform: translateY(-3px) scale(1.02);
+            background: rgba(255,255,255,0.13);
+            border-color: rgba(102,126,234,0.4);
+            box-shadow: 0 6px 20px rgba(102,126,234,0.2);
+        }
+        
+        .link-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            background: rgba(255,255,255,0.15);
+        }
+        
+        .link-text { flex: 1; text-align: left; }
+        .link-name { font-weight: 600; font-size: 0.95rem; }
+        .link-url { font-size: 0.8rem; opacity: 0.6; margin-top: 2px; }
+        
+
+        
+        .link-card {
+            padding: 20px;
+            border-radius: 16px;
+            text-decoration: none;
+            color: white;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .link-card:hover {
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.3);
+        }
+        
+        /* PORTFOLIO SECTION — masonry-style layout (height follows each image) */
+        .portfolio-grid {
+            column-count: 4;
+            column-gap: 22px;
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        @media (max-width: 1100px) {
+            .portfolio-grid { column-count: 3; }
+        }
+
+        @media (max-width: 720px) {
+            .portfolio-grid { column-count: 2; }
+        }
+        
+        .portfolio-item {
+            break-inside: avoid;
+            page-break-inside: avoid;
+            -webkit-column-break-inside: avoid;
+            margin-bottom: 22px;
+            display: inline-block;
+            width: 100%;
+            vertical-align: top;
+            border-radius: 22px;
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease, border-color 0.35s ease;
+            padding: 8px;
+            background: linear-gradient(155deg, rgba(35, 48, 88, 0.55), rgba(8, 12, 28, 0.92));
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+            overflow: hidden;
+            isolation: isolate;
+        }
+        
+        .portfolio-item-frame {
+            border-radius: 14px;
+            overflow: hidden;
+            display: block;
+            line-height: 0;
+            background: radial-gradient(ellipse 90% 80% at 50% 45%, rgba(55, 75, 120, 0.45), rgba(4, 8, 22, 0.95));
+        }
+        
+        .portfolio-item:hover {
+            transform: translateY(-6px) scale(1.01);
+            box-shadow: 0 24px 50px rgba(0, 0, 0, 0.55);
+            border-color: rgba(102,126,234,0.4);
+        }
+        
+        .portfolio-item img {
+            width: 100%;
+            height: auto;
+            display: block;
+            vertical-align: bottom;
+            transition: transform 0.45s ease;
+        }
+        
+        .portfolio-item:hover img {
+            transform: scale(1.02);
+        }
+        
+        .portfolio-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 2;
+            padding: 16px 18px 18px;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.5) 55%, transparent 100%);
+            transform: translateY(100%);
+            transition: transform 0.28s ease;
+            overflow: hidden;
+            pointer-events: none;
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+        }
+        
+        .portfolio-item:hover .portfolio-overlay {
+            transform: translateY(0);
+        }
+        
+        .portfolio-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .portfolio-desc {
+            font-size: 0.9rem;
+            opacity: 0.85;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.35;
+        }
+
+        /* Portfolio modal */
+        .portfolio-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.72);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            cursor: pointer;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .portfolio-modal.open {
+            display: flex;
+        }
+
+        .portfolio-modal-content {
+            max-width: 900px;
+            width: 95%;
+            border-radius: 24px;
+            padding: 24px;
+            position: relative;
+            cursor: default;
+        }
+
+        .portfolio-modal-close {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.14);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            color: var(--text-primary);
+            font-size: 1.35rem;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 3;
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        .portfolio-modal-close:hover {
+            background: rgba(255, 255, 255, 0.26);
+            transform: scale(1.05);
+        }
+
+        .portfolio-modal-body {
+            display: grid;
+            grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.1fr);
+            gap: 20px;
+            align-items: stretch;
+        }
+
+        .portfolio-modal-image {
+            width: 100%;
+            max-height: min(70vh, 640px);
+            height: auto;
+            border-radius: 18px;
+            object-fit: contain;
+            object-position: center;
+            background: rgba(0, 0, 0, 0.35);
+        }
+
+        .portfolio-modal-title {
+            font-size: 1.6rem;
+            margin-bottom: 8px;
+        }
+
+        .portfolio-modal-text {
+            color: var(--text-secondary);
+            line-height: 1.7;
+            font-size: 0.95rem;
+        }
+
+        @media (max-width: 768px) {
+            .portfolio-modal-body {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* MUSIC SECTION */
+        .music-container {
+            text-align: center;
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        /* Visualizer layered into background */
+        .visualizer {
+            position: fixed;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            height: 80px;
+            width: min(750px, 90vw);
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 4px;
+            opacity: 0.45;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .v-bar {
+            width: 6px;
+            background: linear-gradient(to top, var(--accent), #764ba2);
+            border-radius: 3px;
+            height: 10px;
+            transition: height 0.1s;
+        }
+        
+        .music-list {
+            margin-top: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .music-track {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            cursor: pointer;
+            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        background 0.25s ease,
+                        box-shadow 0.25s ease;
+        }
+
+        .music-track:hover {
+            background: rgba(255, 255, 255, 0.14);
+            transform: translateY(-3px) scale(1.01);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        }
+
+        .music-track-main {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-align: left;
+        }
+
+        .music-track-index {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            opacity: 0.8;
+        }
+
+        .music-track-name {
+            font-weight: 600;
+            font-size: 0.98rem;
+        }
+
+        .music-track-artist {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .music-track-play {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.25s;
+        }
+
+        .music-track-play:hover {
+            background: rgba(255,255,255,0.25);
+            transform: scale(1.05);
+        }
+
+        .music-track.active {
+            border-color: var(--accent);
+            box-shadow: 0 0 15px rgba(102,126,234,0.4);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 3px;
+            margin-top: 20px;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #764ba2);
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.1s;
+        }
+        
+        /* SETTINGS SECTION */
+        .settings-container {
+            max-width: 500px;
+            width: 100%;
+        }
+        
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            margin-bottom: 12px;
+            border-radius: 16px;
+            transition: all 0.3s;
+        }
+        
+        .setting-row:hover {
+            background: rgba(255,255,255,0.05);
+        }
+        
+        .setting-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .setting-icon {
+            width: 45px;
+            height: 45px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .setting-name {
+            font-weight: 600;
+            font-size: 1.05rem;
+            margin-bottom: 3px;
+        }
+        
+        .setting-desc {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        
+        .toggle {
+            width: 55px;
+            height: 30px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 15px;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .toggle.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+        }
+        
+        .toggle::after {
+            content: '';
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            width: 22px;
+            height: 22px;
+            background: white;
+            border-radius: 50%;
+            transition: all 0.3s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .toggle.active::after {
+            left: 29px;
+        }
+        
+        /* PROFILE SECTION */
+        .profile-card-large {
+            text-align: center;
+            max-width: 450px;
+            width: 100%;
+            padding: 40px;
+            border-radius: 30px;
+        }
+        
+        .profile-avatar-large {
+            width: 150px;
+            height: 150px;
+            margin: 0 auto 25px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), #764ba2);
+            border: 4px solid rgba(255,255,255,0.5);
+            box-shadow: 0 0 60px rgba(102,126,234,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 60px;
+            font-weight: 700;
+        }
+        
+        .profile-stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin: 30px 0;
+        }
+        
+        .profile-stat {
+            text-align: center;
+        }
+        
+        .profile-stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            display: block;
+        }
+        
+        .profile-stat-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 25px;
+        }
+        
+        .tag {
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 20px;
+            font-size: 0.9rem;
+            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        background 0.25s ease,
+                        box-shadow 0.25s ease;
+            cursor: default;
+        }
+        
+        .tag:hover {
+            background: rgba(102,126,234,0.4);
+            transform: translateY(-4px) scale(1.05);
+            box-shadow: 0 6px 18px rgba(102,126,234,0.35);
+        }
+        
+        /* Mini music player (top-right) */
+        .mini-player {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 16px;
+            border-radius: 18px;
+            cursor: default;
+            transition: all 0.3s;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .mini-player:hover {
+            transform: translateY(-2px);
+        }
+
+        .mini-player-buttons {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .mini-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.35);
+            background: rgba(255,255,255,0.08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.25s;
+        }
+
+        .mini-btn.play {
+            background: linear-gradient(135deg, var(--accent), #764ba2);
+            border-color: transparent;
+        }
+
+        .mini-btn:hover {
+            transform: scale(1.05);
+            background: rgba(255,255,255,0.2);
+        }
+
+        .mini-btn.play:hover {
+            background: linear-gradient(135deg, #764ba2, var(--accent));
+        }
+
+        .mini-player-track {
+            max-width: 180px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--text-secondary);
+        }
+        
+        /* Notification */
+        .notification {
+            position: fixed;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-20px);
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 30px;
+            font-size: 1rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.3s;
+            z-index: 2000;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .notification.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        
+        /* Loader */
+        .loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, #1a2980 0%, #26d0ce 100%);
+            z-index: 3000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.8s;
+        }
+        
+        .loader.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .loader-text {
+            font-size: 3rem;
+            font-weight: 300;
+            letter-spacing: 15px;
+            animation: pulse-text 2s infinite;
+        }
+        
+        @keyframes pulse-text {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+        
+        .loader-bar {
+            width: 200px;
+            height: 3px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 3px;
+            margin-top: 30px;
+            overflow: hidden;
+        }
+        
+        .loader-progress {
+            height: 100%;
+            background: white;
+            width: 0%;
+            animation: load 1.5s ease-out forwards;
+        }
+        
+        @keyframes load { to { width: 100%; } }
+        
+        /* ── HOME NAV BUTTONS ── */
+        .nav-btn {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 26px;
+            border-radius: 14px;
+            text-decoration: none;
+            color: white;
+            font-weight: 600;
+            font-size: 0.95rem;
+            letter-spacing: 0.3px;
+            overflow: hidden;
+            background: rgba(102, 126, 234, 0.2);
+            border: 1px solid rgba(102, 126, 234, 0.45);
+            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        background 0.3s ease,
+                        border-color 0.3s ease,
+                        box-shadow 0.3s ease;
+        }
+
+        .nav-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(102,126,234,0.15), rgba(118,75,162,0.15));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-4px) scale(1.04);
+            background: rgba(102, 126, 234, 0.35);
+            border-color: rgba(102, 126, 234, 0.7);
+            box-shadow: 0 8px 28px rgba(102, 126, 234, 0.3);
+        }
+
+        .nav-btn:hover::before { opacity: 1; }
+
+        .nav-btn:active {
+            transform: translateY(-1px) scale(0.98);
+        }
+
+        .nav-btn-content {
+            position: relative;
+            z-index: 1;
+        }
+        /* ── END HOME NAV BUTTONS ── */
+
+        /* ── LINKS DROPDOWN — style fixe ── */
+        .links-dropdown {
+            border-radius: 16px;
+            overflow: hidden;
+            transition: all 0.3s;
+            background: rgba(20, 30, 60, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+        }
+
+        body.dark-mode {
+            --glass-bg: rgba(0, 0, 0, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .username { font-size: 2.2rem; }
+            .dock { top: 10px; padding: 8px; gap: 8px; }
+            .dock-item { width: 44px; height: 44px; font-size: 20px; }
+            .portfolio-grid { column-count: 2; }
+            .album-art { width: 200px; height: 200px; }
+        }
+
+        @media (max-width: 420px) {
+            .portfolio-grid { column-count: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="loader" id="loader">
+        <div class="loader-text">SILVIZIAN</div>
+        <div class="loader-bar"><div class="loader-progress"></div></div>
+    </div>
+
+    <div id="canvas-container"></div>
+    <div class="notification" id="notification"></div>
+
+    <!-- Background visualizer -->
+    <div class="visualizer" id="visualizer">
+        <!-- Bars generated by JS -->
+    </div>
+
+    <!-- Mini music player -->
+    <div class="mini-player glass" title="Music controls">
+        <div class="mini-player-buttons">
+            <button class="mini-btn" type="button" onclick="prevTrack()">⏮</button>
+            <button class="mini-btn play" type="button" onclick="togglePlay()" id="miniPlayBtn">▶</button>
+            <button class="mini-btn" type="button" onclick="nextTrack()">⏭</button>
+        </div>
+        <div class="mini-player-track" id="miniTrackTitle">
+            No track selected
+        </div>
+    </div>
+
+    <!-- Dock -->
+    <nav class="dock glass">
+        <div class="dock-item active" onclick="showSection('home')" title="Home">🏠</div>
+        <div class="dock-item" onclick="showSection('links')" title="Links">🔗</div>
+        <div class="dock-item" onclick="showSection('portfolio')" title="Portfolio">🖼️</div>
+        <div class="dock-item" onclick="showSection('music')" title="Music">🎵</div>
+        <div class="dock-divider"></div>
+        <div class="dock-item" onclick="showSection('settings')" title="Settings">⚙️</div>
+        <div class="dock-item" onclick="showSection('profile')" title="Profile">👤</div>
+    </nav>
+
+    <div class="ui-layer">
+        <!-- HOME SECTION (profile card) -->
+        <section class="section" id="home-section">
+            <div class="profile-card-large glass">
+                <div class="profile-avatar-large" style="overflow:hidden; padding:0;">
+                    <img src="avatar/avatar.png" alt="Silvizian"
+                         style="width:100%;height:100%;object-fit:cover;border-radius:50%;"
+                         onerror="this.style.display='none';this.parentElement.style.fontSize='60px';this.parentElement.textContent='S';">
+                </div>
+                <h2 style="font-size: 2rem; margin-bottom: 5px;">Silvizian</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 10px;">• Freelance Designer •</p>
+                <div style="margin-top: 24px; display:flex; gap:16px; justify-content:center; flex-wrap:wrap;">
+                    <a href="#" onclick="showSection('links');return false;" class="nav-btn">
+                        <span class="nav-btn-content"> 🔗 </span>
+                    </a>
+                    <a href="#" onclick="showSection('portfolio');return false;" class="nav-btn">
+                        <span class="nav-btn-content"> 🖼️ </span>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- LINKS SECTION -->
+        <section class="section section-hidden" id="links-section">
+            <div style="text-align: center; width: 100%; max-width: 500px;">
+                
+                <div class="home-content">
+                    <div class="avatar-container">
+                        <div class="avatar-glow"></div>
+                        <div class="avatar" onclick="showSection('profile')">S</div>
+                    </div>
+                    
+                    <h1 class="username">Silvizian</h1>
+                    
+                    <div class="divider">
+                        <div class="divider-line"></div>
+                        <div class="divider-dot"></div>
+                        <div class="divider-line"></div>
+                    </div>
+                    
+                    <div class="dropdown-container">
+                        <div class="dropdown links-dropdown" id="dropdown-0">
+                            <button class="dropdown-header" onclick="toggleDropdown(0)">
+                                <span class="dropdown-title">Pro & Content</span>
+                                <svg class="dropdown-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                </svg>
+                            </button>
+                            <div class="dropdown-content">
+                                <div class="dropdown-links">
+                                    <a href="https://instagram.com/elzx.crew" target="_blank" class="link-item">
+                                        <div class="link-icon" style="background: linear-gradient(45deg, #f09433, #e6683c, #dc2743);">📸</div>
+                                        <div class="link-text"><div class="link-name">Instagram Pro</div><div class="link-url">@elzx.crew</div></div>
+                                    </a>
+                                    <a href="https://youtube.com/@silvizian" target="_blank" class="link-item">
+                                        <div class="link-icon" style="background: #ff0000;">▶️</div>
+                                        <div class="link-text"><div class="link-name">YouTube</div><div class="link-url">@silvizian</div></div>
+                                    </a>
+                                    <a href="https://tiktok.com/@janif.trap" target="_blank" class="link-item">
+                                        <div class="link-icon" style="background: #000;">🎵</div>
+                                        <div class="link-text"><div class="link-name">TikTok</div><div class="link-url">@janif.trap</div></div>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="dropdown links-dropdown" id="dropdown-1">
+                            <button class="dropdown-header" onclick="toggleDropdown(1)">
+                                <span class="dropdown-title">Development & Community</span>
+                                <svg class="dropdown-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                </svg>
+                            </button>
+                            <div class="dropdown-content">
+                                <div class="dropdown-links">
+                                    <a href="https://github.com/silvizian" target="_blank" class="link-item">
+                                        <div class="link-icon" style="background: #333;">💻</div>
+                                        <div class="link-text"><div class="link-name">GitHub</div><div class="link-url">github.com/silvizian</div></div>
+                                    </a>
+                                    <a href="https://discord.com/invite/XT5EnwREGK" target="_blank" class="link-item">
+                                        <div class="link-icon" style="background: #5865F2;">🎮</div>
+                                        <div class="link-text"><div class="link-name">Discord</div><div class="link-url">Join the server</div></div>
+                                    </a>
+                                    <a href="https://t.me/silvizian" target="_blank" class="link-item">
+                                        <div class="link-icon" style="background: #0088cc;">✈️</div>
+                                        <div class="link-text"><div class="link-name">Telegram Channel</div><div class="link-url">@silvizian</div></div>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="dropdown links-dropdown" id="dropdown-2">
+                            <button class="dropdown-header" onclick="toggleDropdown(2)">
+                                <span class="dropdown-title">Personal Space</span>
+                                <svg class="dropdown-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                </svg>
+                            </button>
+                            <div class="dropdown-content">
+                                <div class="dropdown-links">
+                                    <a href="https://instagram.com/janif_trap" target="_blank" class="link-item">
+                                        <div class="link-icon" style="background: linear-gradient(45deg, #f09433, #e6683c, #dc2743);">📸</div>
+                                        <div class="link-text"><div class="link-name">Instagram</div><div class="link-url">@janif_trap</div></div>
+                                    </a>
+                                    <a href="https://vk.com/janif_trap" target="_blank" class="link-item">
+                                        <div class="link-icon" style="background: #4c75a3;">VK</div>
+                                        <div class="link-text"><div class="link-name">VKontakte</div><div class="link-url">vk.com/janif_trap</div></div>
+                                    </a>
+                                    <a href="https://open.spotify.com/user/okj6m2xqs1wtu1r7cy5aqhp7a" target="_blank" class="link-item">
+                                        <div class="link-icon" style="background: #1db954;">🎧</div>
+                                        <div class="link-text"><div class="link-name">Spotify</div><div class="link-url">Playlists</div></div>
+                                    </a>
+                                    <a href="https://t.me/janif_trap" target="_blank" class="link-item">
+                                        <div class="link-icon" style="background: #0088cc;">✈️</div>
+                                        <div class="link-text"><div class="link-name">Telegram</div><div class="link-url">@janif_trap</div></div>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="divider">
+                    <div class="divider-line"></div>
+                    <div class="divider-dot"></div>
+                    <div class="divider-line"></div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- PORTFOLIO SECTION -->
+        <section class="section section-hidden" id="portfolio-section">
+            <div style="width: 100%; max-width: 1200px;">
+                <div style="text-align: center; margin-bottom: 40px;">
+                </div>
+                    <div class="portfolio-grid" id="portfolioGrid">
+                </div>
+            </div>
+        </section>
+
+        <!-- Portfolio modal -->
+        <div class="portfolio-modal" id="portfolioModal" onclick="closePortfolioModalIfBackdrop(event)">
+            <div class="portfolio-modal-content glass" onclick="event.stopPropagation()">
+                <button class="portfolio-modal-close" type="button" onclick="closePortfolioModal()" aria-label="Close">✕</button>
+                <div class="portfolio-modal-body">
+                    <div>
+                        <img id="portfolioModalImage" class="portfolio-modal-image" src="" alt="Project">
+                    </div>
+                    <div style="text-align: left;">
+                        <h3 id="portfolioModalTitle" class="portfolio-modal-title"></h3>
+                        <p id="portfolioModalDesc" class="portfolio-modal-text"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MUSIC SECTION -->
+        <section class="section section-hidden" id="music-section">
+            <div class="music-container">
+                <h2 style="font-size: 2.5rem; margin-bottom: 10px;">🎵 Music</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 25px;">Pick a track below to play it</p>
+
+                <div class="track-info" style="margin-bottom: 20px;">
+                    <h3 id="trackName">No track selected</h3>
+                    <p id="trackArtist">Choose a title from the list</p>
+                </div>
+                
+                <div class="progress-bar" onclick="seekTrack(event)">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+
+                <div class="music-list">
+                    <div class="music-track" onclick="playFromLibrary(0)" id="track-card-0">
+                        <div class="music-track-main">
+                            <div class="music-track-index">1</div>
+                            <div>
+                                <div class="music-track-name">#2</div>
+                                <div class="music-track-artist">The Loner(s)</div>
+                            </div>
+                        </div>
+                        <button class="music-track-play" type="button">▶</button>
+                    </div>
+
+                    <div class="music-track" onclick="playFromLibrary(1)" id="track-card-1">
+                        <div class="music-track-main">
+                            <div class="music-track-index">2</div>
+                            <div>
+                                <div class="music-track-name">UN AUTRE JOUR</div>
+                                <div class="music-track-artist">FEMTOGO</div>
+                            </div>
+                        </div>
+                        <button class="music-track-play" type="button">▶</button>
+                    </div>
+
+                    <div class="music-track" onclick="playFromLibrary(2)" id="track-card-2">
+                        <div class="music-track-main">
+                            <div class="music-track-index">3</div>
+                            <div>
+                                <div class="music-track-name">The Last One</div>
+                                <div class="music-track-artist">YUZMV</div>
+                            </div>
+                        </div>
+                        <button class="music-track-play" type="button">▶</button>
+                    </div>
+
+                    <div class="music-track" onclick="playFromLibrary(3)" id="track-card-3">
+                        <div class="music-track-main">
+                            <div class="music-track-index">4</div>
+                            <div>
+                                <div class="music-track-name">Russian Girl</div>
+                                <div class="music-track-artist">Jenia Ludich</div>
+                            </div>
+                        </div>
+                        <button class="music-track-play" type="button">▶</button>
+                    </div>
+
+                    <div class="music-track" onclick="playFromLibrary(4)" id="track-card-4">
+                        <div class="music-track-main">
+                            <div class="music-track-index">5</div>
+                            <div>
+                                <div class="music-track-name">Стеклянная</div>
+                                <div class="music-track-artist">GUMA</div>
+                            </div>
+                        </div>
+                        <button class="music-track-play" type="button">▶</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SETTINGS SECTION -->
+        <section class="section section-hidden" id="settings-section">
+            <div class="settings-container">
+                <h2 style="font-size: 2.5rem; margin-bottom: 30px; text-align: center;">⚙️ Settings</h2>
+                
+                <div class="setting-row glass" id="setting-darkmode">
+                    <div class="setting-info">
+                        <div class="setting-icon">🌙</div>
+                        <div>
+                            <div class="setting-name">Dark mode</div>
+                            <div class="setting-desc">Darker glass UI</div>
+                        </div>
+                    </div>
+                    <div class="toggle" onclick="toggleSetting('darkmode')"></div>
+                </div>
+                
+                <div class="setting-row glass" id="setting-effects">
+                    <div class="setting-info">
+                        <div class="setting-icon">✨</div>
+                        <div>
+                            <div class="setting-name">3D effects</div>
+                            <div class="setting-desc">Animated clouds & sky</div>
+                        </div>
+                    </div>
+                    <div class="toggle active" onclick="toggleSetting('effects')"></div>
+                </div>
+                
+                <div class="setting-row glass" id="setting-particles">
+                    <div class="setting-info">
+                        <div class="setting-icon">❄️</div>
+                        <div>
+                            <div class="setting-name">Particles</div>
+                            <div class="setting-desc">Snow / dust effect</div>
+                        </div>
+                    </div>
+                    <div class="toggle active" onclick="toggleSetting('particles')"></div>
+                </div>
+                
+                <div class="setting-row glass" id="setting-autoplay">
+                    <div class="setting-info">
+                        <div class="setting-icon">▶️</div>
+                        <div>
+                            <div class="setting-name">Autoplay</div>
+                            <div class="setting-desc">Start music automatically</div>
+                        </div>
+                    </div>
+                    <div class="toggle active" onclick="toggleSetting('autoplay')"></div>
+                </div>
+                
+                <div class="setting-row glass" id="setting-blur">
+                    <div class="setting-info">
+                        <div class="setting-icon">🌫️</div>
+                        <div>
+                            <div class="setting-name">Background blur</div>
+                            <div class="setting-desc">Glass blur on cards</div>
+                        </div>
+                    </div>
+                    <div class="toggle active" onclick="toggleSetting('blur')"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- PROFILE SECTION -->
+        <section class="section section-hidden" id="profile-section">
+            <div class="profile-card-large glass">
+                <div class="profile-avatar-large" style="overflow:hidden; padding:0;">
+                    <img src="avatar/avatar.png" alt="Silvizian"
+                         style="width:100%;height:100%;object-fit:cover;border-radius:50%;"
+                         onerror="this.style.display='none';this.parentElement.style.fontSize='60px';this.parentElement.textContent='S';">
+                </div>
+                <h2 style="font-size: 2rem; margin-bottom: 5px;">Silvizian</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 20px;">• Freelance Designer •</p>
+                
+                <p style="line-height: 1.8; margin-bottom: 25px;">
+                    "People's Federal Soviet Republic of Quebekistan"<br>
+                    Freelance Photoshop designer & Modder gaming<br>
+                    • Creative mindset •
+                </p>
+                                
+                <div class="tags">
+                    <span class="tag">#photoshop</span>
+                    <span class="tag">#modding</span>
+                    <span class="tag">#creative</span>
+                    <span class="tag">#design</span>
+                    <span class="tag">#3d</span>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <a href="https://www.instagram.com/elzx.crew/" class="link-item" style="display: inline-flex;">
+                        📧 Contact me
+                    </a>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // ==========================================
+        // CONFIGURATION — edit here
+        // ==========================================
+        
+        // PORTFOLIO: add your projects
+        // Put images in a "projects/" folder or use full URLs
+        // e.g. image: "projects/my-project-1.jpg"
+
+        const portfolioProjects = [
+            {
+                title: "Charger ELZX",
+                desc: "This work celebrates the domesticated violence of the American muscle car, frozen in a space that is neither garage nor living room, but a sanctuary of testosterone. The selective black and white—with those red demon eyes piercing through the image—transforms the Dodge Charger into a predatory creature, more an element of design than a vehicle. The white shapes on the ground, somewhere between splatter and puddle, suggest that the beast has already struck. The contrast between the comfortable sofa in the foreground and the war machine at the center creates a tension of class, gender, and territory. It is the fantasy of a man who wants to tame 700 horsepower without leaving his basement. The text at the bottom, in small technical lettering, praises power with the coldness of a spec sheet—as if the poetry of speed had to apologize for existing",
+                image: "projects/projects1.png",
+            },
+            {
+                title: "ELZX",
+                desc: "This work blends sacred naïveté and digital despair in a single glitched breath. The child in white, kneeling before a ghostly elephant, evokes the purity of a prayer—but the sky in chromatic decay, those green and violet streaks cutting across the image, remind us that no innocence survives the screen. The neon writing, both soft and aggressive, flickers like a memory one tries to burn into the retina. The text at the bottom, wavering between a suicidal threat and a promise of posthumous love, transforms the scene into a visual testament. “When you gone”—no question mark, just the brutal statement of an absence already realized. The cross in the upper right and the “RESTRICTED” label at the bottom frame the image like a medical file or a censored video. It is childhood photographed by an adult who already knows how it ends.",
+                image: "projects/projects2.png",
+            },
+            {
+                title: "666",
+                desc: "This work celebrates the mouth as a sanctuary of desire and destruction. The lips, swollen with crimson and shadow, open onto a lace of light—shimmering filaments that evoke both saliva and stars, an intimate fusion of celestial body and moist flesh. The word “666,” in chrome gothic, embeds itself like a cursed kiss, a seal that transforms sensuality into declared transgression. The aggressive grain, the violet and blue reflections, the bursts of light scattered across the skin create the atmosphere of an underground club filtered through a feverish dream. This is not a mouth meant to be kissed—it is a mouth to be worshipped. The sacred and the profane do not coexist here: they bite into each other.",
+                image: "projects/projects3.png",
+            },
+            {
+                title: "Мавка",
+                desc: "This work captures the spectral solitude of a presence that refuses to disappear. The black silhouette, crowned with an organic form that could be flowers or decay, stands before a horizon of ruins—no face, no identity, only the frozen posture of someone who has been waiting for far too long. The aggressive pointillism turns the image into a funerary engraving, as if time itself had eroded it before it even existed. The gray halo behind the figure reveals nothing; it blinds. The broken columns in the distance evoke a classical world in decay, an Antiquity turned cemetery. The ghostly text in the background—“VASHKA”—floats like a forgotten name, a legend no longer readable. It is the portrait of an eternal widow, of a revenant who no longer knows for whom it returns.",
+                image: "projects/projects4.png",
+            },
+            {
+                title: "Paranoid",
+                desc: "This work freezes the anxiety of being perceived in its most visceral form. The figure with angel wings hides its face among the trees, yet its wings—covered in code and illegible characters—betray any attempt at concealment. The sacred angel becomes a surface of projection, a screen-body, material to be interpreted. The contrast is brutal: inky black against spectral white. The forest is not a backdrop—it is a threat. Vertical trunks that imprison, foliage that conceals invisible eyes. The title at the bottom, in a clinical serif, reduces poetry to psychiatric diagnosis. It is the angel of digital surveillance, of forced exposure, of the intolerable certainty that one will never be invisible enough.",
+                image: "projects/projects5.png",
+            },
+            {
+                title: "dark soul",
+                desc: "This work captures the precise moment when memory tips into oblivion. The subject, barely sketched in the mist, escapes all identification—it is no longer a person, but what remains of them. The worn frame and surface artifacts do not simulate age: they materialize the very degradation of memory. Chromatic aberration—those red and cyan fringes—betrays the image as a fragile construction, a reality that glitches under the weight of time. A palette of ash and muted greens. No comfort. Only the testimony of a presence turned spectral, frozen in the act of disappearing.",
+                image: "projects/projects6.png",
+            },
+            {
+                title: "ANGELS",
+                desc: "This work freezes the fallen angel in its natural habitat: the dead forest of an endless winter. The black silhouette, framed by those thick, brutal white wings, moves toward the darkness without ever turning back. The grain of the image, somewhere between photography and woodcut engraving, gives the scene the appearance of a found document, a material proof of the impossible. The title “ANGELS” at the top, scarred and barbed, already betrays its own promise—these letters do not comfort, they warn. The dirty snow, the black trunks, the white sky without horizon create a palette of mourning where even the light seems frozen. It is the angel of Nordic melancholy, not the one of annunciation but of abandonment, walking through the forest for so long that it has forgotten why it fell.",
+                image: "projects/projects7.png",
+            },
+            {
+                title: "Beautiful",
+                desc: "This work captures the suspended fragility of a moment on the verge of tipping. The feet, entwined with unplugged Christmas lights, float in a saturated violet void—neither dance nor fall, just the precise instant when the body forgets gravity. The aggressive digital grain transforms the skin into a pixelated surface, flesh turned screen. The word “Beautiful” at the bottom, repeated and ghostlike, fades beneath hollow motivational phrases like Instagram quotes. The “Restricted” and “Parental Advisory” labels frame the image as an ironic warning: this beauty is consumption, this lightness is commodity. It is the melancholy of Generation Z, suspended between the desire to disappear and the need to be seen.",
+                image: "projects/projects8.png",
+            },
+            {
+                title: "ANGEL",
+                desc: "This work explores digital surveillance through a face fractured into coarse pixels—the flesh becomes a matrix, the image becomes data. The Russian text “ВНИМАНИЕ ВИЗУАЛ ШУМ” (“Attention: visual noise”) does not warn of an error; it celebrates it: noise is the only truth of the digital image, the face a battleground between identity and fragmentation.",
+                image: "projects/projects9.png",
+            },
+            {
+                title: "<3 < $",
+                desc: "This work reduces the image to its most minimal essence: a pink blot of light in the black, blurry, almost organic, like a breath on film. The “Restricted” and “Parental Advisory” logos frame the void as guarantors of authenticity—here, censorship becomes aesthetic, the void becomes content. The equation at the top, “<3 < $,” summarizes an entire philosophy in three symbols: love is less than money, romance reduced to transaction. It is the perfect album cover for a generation that has learned to communicate in emoticons and measure its worth in streams. Nothing is shown, everything is suggested—and it’s worse.",
+                image: "projects/projects10.png",
+            },
+            {
+                title: "Sgiz",
+                desc: "This work transforms typography into an archaeological ruin. The letters, eroded like stones from a forgotten temple, emerge from the black with a texture of rust and moss—the passage of time has not affected them; they are time. The “Parental Advisory” in the corner, bursting in white, creates a brutal dissonance: the explicit content is not in the words, it is in their very decomposition. It is the album cover as funerary stele. What was meant to be read has become relief; what was meant to be heard has become the silence of stone. The music promised by this visual is not meant to be danced to—it is meant to be discovered among ruins, millennia later, by a civilization that will no longer know what a “Parental Advisory” is.",
+                image: "projects/projects11.png",
+            },
+            {
+                title: "fall",
+                desc: "This work transforms the corporate logo into an apocalyptic artifact. The eroded sphere, streaked with textures like a dead moon, bears the “RL” emblem as a mark of a forgotten brand. The red lightning tearing through it at the top is no accident—they are birth, the spark that fractures the smooth surface of branding. The black-and-red frame, worn at the corners, encloses everything like an archival document or time capsule. It is no longer a visual identity; it is a relic. The ® symbol, tiny and arrogant, persists as denial—yes, it is registered, yes, it is property, but of what and whom when everything collapses? It is the end of capitalism aestheticized as an album cover.",
+                image: "projects/projects12.png",
+            },
+            {
+                title: "Gallows",
+                desc: "This work superimposes innocence and threat in the same stifled breath. The adult hands framing the child’s face—gesture of protection or control?—cover the ears as if to prevent hearing what is about to happen. Above, in the darkness streaked with dead television lines, the gallows waits, silent and already present. The aggressive pointillism transforms the scene into a disrupted transmission, as if the image itself hesitates to show what it knows. The white collar, the school uniform, the braid—all signals of normality—only accentuate the underlying horror that hovers. This is not a portrait; it is a warning passed down through generations, inherited violence laid on the shoulders of those who have not yet learned to name it.",
+                image: "projects/projects13.png",
+            },
+            {
+                title: "HOPELESSNESS",
+                desc: "This work reduces the human being to its most radical condition: a faceless body, a mind with no way out. The head, rendered in a clinical X-ray blue, bears the word “HOPELESSNESS” like a pixelated censorship—no need for eyes when the diagnosis is displayed on the forehead. The neck, bloody and encircled by barbed wire, turns suffering into a necklace, suffocation into an ornament. The loudspeakers in the background, black circles like holes in reality, suggest that this despair is not silent—it is amplified, broadcast, looped endlessly. It is the portrait of a generation that has learned to internalize violence as a playlist, the body transformed into the hi-fi system of its own defeat.",
+                image: "projects/projects14.png",
+            },
+            {
+                title: "ANEMOIA",
+                desc: "This work freezes the melancholy of a future that does not exist—anemoia, the nostalgia for a time never lived. The face, rendered in medical scanner electric cyan, wears fractured glasses inlaid with organic, almost rusted patterns. Vision itself is altered, filtered through a decomposition that is not a glitch but simulated memory. The gray splashes bursting from the temples suggest a leak, a fluid escaping the skull like corrupted data. This is not a portrait; it is a hard drive dreaming of being human, a 3D face trying to remember an era when flesh did not need rendering. The icy beauty, the artificial sadness—everything is fake, and that is precisely why it hurts.",
+                image: "projects/projects15.png",
+            },
+            {
+                title: "WINGS GIVEN BEFORE STRENGTH",
+                desc: "This work captures the tragedy of premature preparation—wings offered before the body knows how to bear their weight. The crouching angel, head buried in its knees, does not fly: it shields itself from the gaze of the hands around it, those bodiless silhouettes that reach, demand, perhaps push. The wings, magnificent and unfolded, become a burden, scaffolding too large for the child they cover. The text above—“WINGS GIVEN BEFORE STRENGTH”—does not specify who gives, who receives, who is to blame. The aggressive pointillism transforms the scene into a funerary engraving, as if the image itself dated from an era when angels still fell. It is the portrait of all youth rushed into adulthood, of all talent imposed before there was time to relinquish it.",
+                image: "projects/projects16.png",
+            },
+            {
+                title: "Selenia",
+                desc: "This work freezes the marine appearance of a specter that refuses to disappear. The white figure, blurry like a drowned memory, emerges from an ocean without horizon, where sky and water merge into a mourning gray. The black hair, wet and unruly, hides the face without concealing it—you sense eyes that look without seeing, present without being there. The grain of the image, that texture of film forgotten in saltwater, turns the scene into a recovered testimony, evidence of a drowning that did not happen or repeats endlessly. The barely visible tattoos on the thighs remind us that she was corporeal, that she existed before becoming this tide ghost. She is the bride of the sea—not in a romantic version, but in her truth: cold, floating, and already gone.",
+                image: "projects/projects17.png",
+            },
+            {
+                title: "MY GOD IS SATAN",
+                desc: "This work juxtaposes equestrian innocence and blasphemous provocation in the same breath of dust. The white horse, a millennia-old symbol of purity and conquest, is here reduced to a granular texture, to stone-like flesh eroded by time. The scarlet text—“MY GOD IS SATAN”—is not inscribed on the image; it brands it, transforming the pastoral idyll into a manifesto of rebellion. The Gothic motifs in the background, black lace reminiscent of destroyed stained glass, create an atmosphere of a desecrated chapel. This is not a conversion we see, but an inversion—the Horse of the Apocalypse whitewashed with lime, the beast turned idol. The aggressive grain, the brutal contrast, the inverted cross at the bottom: all combine to make this image an act of negative faith, a scandalous prayer whispered into the ear of an animal that did not choose to be god.",
+                image: "projects/projects18.png",
+            },
+            {
+                title: "ПАРАНОЙЯ",
+                desc: "This image captures the essence of paranoia in a form that is both fragile and unsettling. The white figure lying on a dark log appears vulnerable yet frozen in a moment of surrender, while the ghostly faces barely emerging from the blackness suggest an oppressive, unseen presence. The stark contrast between the cold light illuminating the figure and the surrounding darkness creates an atmosphere where innocence and threat coexist, intensifying the feeling of imminent danger lurking in the shadows. The grainy, monochrome treatment of the image, combined with the Russian text evoking night and fear, sets a nightmare-like mood where reality feels unstable. Every shadow becomes suspicious, every silence charged with anxiety. This artwork explores the blurred boundary between the visible and invisible, visually translating the paralyzing grip of inner fear, where the night no longer protects but imprisons.",
+                image: "projects/projects19.png",
+            },
+        ];
+        
+        // MUSIC: default library
+        // Put audio files in a "music/" folder next to this file
+        // e.g. music/track1.mp3, music/track2.mp3
+        // Edit this array to change the playlist:
+        const defaultTracks = [
+            { name: "#2", artist: "The Loner(s)", file: "music/background-music.mp3" },
+            { name: "UN AUTRE JOUR", artist: "FEMTOGO", file: "music/background-music2.mp3" },
+            { name: "LA DERNIÉRE", artist: "YUZMV", file: "music/background-music3.mp3" },
+            { name: "RUSSIAN GIRL", artist: "JENIA LUDICH", file: "music/background-music4.mp3" },
+            { name: "СТЕКЛЯННАЯ", artist: "GUMA", file: "music/background-music5.mp3" }
+        ];
+        
+        // ==========================================
+        // THREE.JS SCENE
+        // ==========================================
+
+        let scene, camera, renderer;
+        let skyCanvas, skyCtx, sky;
+        let cloudGroup, clouds = [];
+        let particles = null;
+        let mouseX = 0, mouseY = 0;
+        let targetX = 0, targetY = 0;
+        let effectsEnabled = true;
+        let particlesEnabled = true;
+        let lastTime = 0;
+        let clock;
+
+        function updateSky(weatherType) {
+            const gradients = {
+                cloudy: ['#0f2027', '#203a43', '#2c5364', '#7aa1d2'],
+                sunny: ['#2980b9', '#6dd5fa', '#ffffff', '#ffe259'],
+                rainy: ['#373b44', '#4286f4', '#373b44', '#2c3e50'],
+                night: ['#0f0c29', '#302b63', '#24243e', '#1a1a2e']
+            };
+            
+            const colors = gradients[weatherType] || gradients.cloudy;
+
+            // Always update CSS background (even without Three.js)
+            document.body.style.background = `linear-gradient(180deg, ${colors[0]} 0%, ${colors[3]} 100%)`;
+
+            if (!skyCanvas || !skyCtx || !sky || !window.THREE) return;
+
+            const grd = skyCtx.createLinearGradient(0, 0, 0, 512);
+            grd.addColorStop(0, colors[0]);
+            grd.addColorStop(0.3, colors[1]);
+            grd.addColorStop(0.6, colors[2]);
+            grd.addColorStop(1, colors[3]);
+            skyCtx.clearRect(0, 0, 512, 512);
+            skyCtx.fillStyle = grd;
+            skyCtx.fillRect(0, 0, 512, 512);
+            
+            // Stylized clouds (2D canvas)
+            for (let i = 0; i < 15; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                const r = 30 + Math.random() * 60;
+                const cloudGrad = skyCtx.createRadialGradient(x, y, 0, x, y, r);
+                cloudGrad.addColorStop(0, 'rgba(255,255,255,0.15)');
+                cloudGrad.addColorStop(1, 'rgba(255,255,255,0)');
+                skyCtx.fillStyle = cloudGrad;
+                skyCtx.beginPath();
+                skyCtx.arc(x, y, r, 0, Math.PI * 2);
+                skyCtx.fill();
+            }
+            
+            if (sky.material.map) {
+                sky.material.map.needsUpdate = true;
+            }
+        }
+        
+        if (window.THREE && typeof THREE.Scene === 'function') {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x1a2980, 10, 150);
+            
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 0);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+        
+            // Sky dome with gradient texture
+            skyCanvas = document.createElement('canvas');
+            skyCanvas.width = 512;
+            skyCanvas.height = 512;
+            skyCtx = skyCanvas.getContext('2d');
+        
+            const skyTex = new THREE.CanvasTexture(skyCanvas);
+            sky = new THREE.Mesh(
+                new THREE.SphereGeometry(300, 32, 32),
+                new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide })
+            );
+            scene.add(sky);
+
+            // Initial sky colors
+            updateSky('cloudy');
+        
+            // 3D clouds
+            cloudGroup = new THREE.Group();
+            scene.add(cloudGroup);
+        
+            function createCloud(x, y, z, scale) {
+                const cloud = new THREE.Group();
+                const positions = [[0,0,0], [1,0.2,0], [-1,0.1,0.2], [0.5,0.5,0], [-0.3,0.4,-0.2]];
+                
+                const cloudMat = new THREE.MeshLambertMaterial({
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.6,
+                    emissive: 0xffffff,
+                    emissiveIntensity: 0.1
+                });
+                
+                positions.forEach(pos => {
+                    const geo = new THREE.SphereGeometry(1 + Math.random() * 0.5, 16, 16);
+                    const mesh = new THREE.Mesh(geo, cloudMat);
+                    mesh.position.set(pos[0], pos[1], pos[2]);
+                    cloud.add(mesh);
+                });
+                
+                cloud.position.set(x, y, z);
+                cloud.scale.set(scale, scale, scale);
+                return cloud;
+            }
+        
+            clouds = [];
+            for (let i = 0; i < 12; i++) {
+                const angle = (i / 12) * Math.PI * 2;
+                const radius = 25 + Math.random() * 35;
+                const cloud = createCloud(
+                    Math.cos(angle) * radius,
+                    (Math.random() - 0.5) * 15,
+                    Math.sin(angle) * radius - 15,
+                    2 + Math.random() * 3
+                );
+                cloud.userData = {
+                    speed: 0.0003 + Math.random() * 0.0005,
+                    floatSpeed: 0.15 + Math.random() * 0.25,
+                    floatOffset: Math.random() * Math.PI * 2,
+                    originalY: cloud.position.y,
+                    angle: angle,
+                    radius: radius,
+                    baseScale: cloud.scale.x
+                };
+                cloudGroup.add(cloud);
+                clouds.push(cloud);
+            }
+        
+            // Particles
+            const particlesGeo = new THREE.BufferGeometry();
+            const particlesCount = 400;
+            const posArray = new Float32Array(particlesCount * 3);
+            for (let i = 0; i < particlesCount * 3; i++) {
+                posArray[i] = (Math.random() - 0.5) * 120;
+            }
+            particlesGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        
+            particles = new THREE.Points(
+                particlesGeo,
+                new THREE.PointsMaterial({ size: 0.4, color: 0xffffff, transparent: true, opacity: 0.7 })
+            );
+            scene.add(particles);
+        
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+        
+            const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            sunLight.position.set(50, 100, 50);
+            scene.add(sunLight);
+        
+            // Animation loop
+            document.addEventListener('mousemove', (e) => {
+                mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+                mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+            });
+        
+            clock = new THREE.Clock();
+        
+            function animate(now = 0) {
+                requestAnimationFrame(animate);
+            
+                // Cap at ~60 FPS to avoid freezing the browser
+                if (now - lastTime < 16) return; 
+                lastTime = now;
+
+                const time = clock.getElapsedTime();
+            
+                if (effectsEnabled && sky && clouds.length) {
+                    sky.rotation.y += 0.0001;
+                
+                    clouds.forEach(cloud => {
+                        cloud.userData.angle += cloud.userData.speed;
+                        cloud.position.x = Math.cos(cloud.userData.angle) * cloud.userData.radius;
+                        cloud.position.z = Math.sin(cloud.userData.angle) * cloud.userData.radius;
+                        cloud.position.y = cloud.userData.originalY + Math.sin(time * cloud.userData.floatSpeed + cloud.userData.floatOffset) * 2;
+                        
+                        // Subtle breathing scale on clouds
+                        const scalePulse = 0.9 + Math.sin(time * 0.6 + cloud.userData.floatOffset) * 0.15;
+                        const s = cloud.userData.baseScale * scalePulse;
+                        cloud.scale.set(s, s, s);
+                    });
+                }
+            
+                if (particlesEnabled && particles) {
+                    particles.rotation.y = time * 0.008;
+                    particles.position.y = Math.sin(time * 0.03) * 3;
+                }
+            
+                targetX += (mouseX - targetX) * 0.05;
+                targetY += (mouseY - targetY) * 0.05;
+            
+                camera.rotation.y = targetX * 0.08;
+                camera.rotation.x = targetY * 0.04;
+            
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            // RESPONSIVE
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        } else {
+            console.warn('Three.js failed to load; 3D scene is disabled.');
+        }
+        
+        // ==========================================
+        // UI FUNCTIONS
+        // ==========================================
+        
+        function showNotification(text) {
+            const notif = document.getElementById('notification');
+            notif.textContent = text;
+            notif.classList.add('show');
+            setTimeout(() => notif.classList.remove('show'), 2500);
+        }
+        
+        const sectionLabels = {
+            home: 'Home', links: 'Links', portfolio: 'Portfolio',
+            music: 'Music', settings: 'Settings', profile: 'Profile'
+        };
+
+        function showSection(sectionName) {
+            document.querySelectorAll('.section').forEach(s => {
+                s.classList.add('section-hidden');
+                s.classList.remove('section-visible');
+            });
+            const target = document.getElementById(sectionName + '-section');
+            target.classList.remove('section-hidden');
+            void target.offsetWidth; // reflow to replay animation
+            target.classList.add('section-visible');
+
+            const index = ['home', 'links', 'portfolio', 'music', 'settings', 'profile'].indexOf(sectionName);
+            document.querySelectorAll('.dock-item').forEach((item, i) => {
+                item.classList.toggle('active', i === index);
+            });
+
+            window.scrollTo(0, 0);
+            showNotification(sectionLabels[sectionName] || sectionName);
+        }
+        
+        function toggleDropdown(index) {
+            document.getElementById(`dropdown-${index}`).classList.toggle('open');
+        }
+        
+        // Time-of-day sky (background only)
+        function initWeather() {
+            const hour = new Date().getHours();
+            let type;
+            if (hour >= 22 || hour < 6) {
+                type = 'night';
+            } else if (hour >= 18 && hour < 22) {
+                type = 'rainy';
+            } else if (hour >= 11 && hour < 18) {
+                type = 'sunny';
+            } else {
+                type = 'cloudy';
+            }
+            updateSky(type);
+        }
+        
+        // PORTFOLIO — dynamic grid
+        function generatePortfolio() {
+            const grid = document.getElementById('portfolioGrid');
+            grid.innerHTML = '';
+            
+            portfolioProjects.forEach((project, index) => {
+                const item = document.createElement('div');
+                item.className = 'portfolio-item';
+                item.innerHTML = `
+                    <div class="portfolio-item-frame">
+                        <img src="${project.image}" alt="${project.title}" onerror="this.src='https://placehold.co/400x250/667eea/ffffff?text=Project+${index+1}'">
+                    </div>
+                    <div class="portfolio-overlay">
+                        <div class="portfolio-title">${project.title}</div>
+                        <div class="portfolio-desc">${project.desc}</div>
+                    </div>
+                `;
+                item.onclick = () => openPortfolioModal(project, index);
+                grid.appendChild(item);
+            });
+        }
+        
+        generatePortfolio();
+
+        // Portfolio modal
+        function openPortfolioModal(project, index) {
+            const modal = document.getElementById('portfolioModal');
+            const img = document.getElementById('portfolioModalImage');
+            const title = document.getElementById('portfolioModalTitle');
+            const desc = document.getElementById('portfolioModalDesc');
+
+            img.src = project.image;
+            img.alt = project.title || `Project ${index + 1}`;
+            title.textContent = project.title || `Project ${index + 1}`;
+            desc.textContent = project.desc || '';
+
+            modal.classList.add('open');
+        }
+
+        function closePortfolioModal() {
+            const modal = document.getElementById('portfolioModal');
+            modal.classList.remove('open');
+        }
+
+        function closePortfolioModalIfBackdrop(event) {
+            if (event.target === document.getElementById('portfolioModal')) {
+                closePortfolioModal();
+            }
+        }
+        
+        // MUSIC
+        let audioPlayer = new Audio();
+        let isPlaying = false;
+        let currentTrackIndex = 0;
+        let tracks = defaultTracks.slice();
+        let visualizerInterval;
+        
+        // Init spectrum bars
+        function initVisualizer() {
+            const vis = document.getElementById('visualizer');
+            vis.innerHTML = '';
+            for (let i = 0; i < 20; i++) {
+                const bar = document.createElement('div');
+                bar.className = 'v-bar';
+                vis.appendChild(bar);
+            }
+        }
+        initVisualizer();
+        
+        function loadTrack(index, autoplay = settings.autoplay) {
+            if (tracks.length === 0) return;
+            currentTrackIndex = index;
+            const track = tracks[index];
+            audioPlayer.src = track.file;
+
+            const nameEl = document.getElementById('trackName');
+            const artistEl = document.getElementById('trackArtist');
+            const miniTitle = document.getElementById('miniTrackTitle');
+            if (nameEl) nameEl.textContent = track.name;
+            if (artistEl) artistEl.textContent = track.artist;
+            if (miniTitle) miniTitle.textContent = track.name;
+            
+            if (autoplay) {
+                if (!isPlaying) {
+                    togglePlay();
+                } else {
+                    audioPlayer.play();
+                }
+            }
+        }
+        
+        function togglePlay() {
+            if (tracks.length === 0) {
+                showNotification('Add music files to the library first');
+                return;
+            }
+            
+            isPlaying = !isPlaying;
+            const mainPlay = document.getElementById('playBtn');
+            const miniPlay = document.getElementById('miniPlayBtn');
+            if (mainPlay) mainPlay.textContent = isPlaying ? '⏸' : '▶';
+            if (miniPlay) miniPlay.textContent = isPlaying ? '⏸' : '▶';
+
+            const albumArt = document.getElementById('albumArt');
+            if (albumArt) {
+                albumArt.classList.toggle('playing', isPlaying);
+            }
+            
+            if (isPlaying) {
+                audioPlayer.play();
+                visualizerInterval = setInterval(() => {
+                    document.querySelectorAll('.v-bar').forEach(bar => {
+                        bar.style.height = (10 + Math.random() * 70) + 'px';
+                    });
+                    updateProgress();
+                }, 100);
+            } else {
+                audioPlayer.pause();
+                clearInterval(visualizerInterval);
+                document.querySelectorAll('.v-bar').forEach(bar => {
+                    bar.style.height = '10px';
+                });
+            }
+        }
+        
+        function prevTrack() {
+            if (tracks.length === 0) return;
+            currentTrackIndex = (currentTrackIndex - 1 + tracks.length) % tracks.length;
+            loadTrack(currentTrackIndex, false);
+            if (isPlaying) audioPlayer.play();
+        }
+        
+        function nextTrack() {
+            if (tracks.length === 0) return;
+            currentTrackIndex = (currentTrackIndex + 1) % tracks.length;
+            loadTrack(currentTrackIndex, false);
+            if (isPlaying) audioPlayer.play();
+        }
+        
+        function updateProgress() {
+            if (audioPlayer.duration) {
+                const percent = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+                document.getElementById('progressFill').style.width = percent + '%';
+            }
+        }
+        
+        function seekTrack(event) {
+            if (!audioPlayer.duration) return;
+            const rect = event.currentTarget.getBoundingClientRect();
+            const percent = (event.clientX - rect.left) / rect.width;
+            audioPlayer.currentTime = percent * audioPlayer.duration;
+        }
+        
+        audioPlayer.addEventListener('ended', () => {
+            nextTrack();
+        });
+
+        function playFromLibrary(index) {
+            if (tracks.length === 0) return;
+            document.querySelectorAll('.music-track').forEach((el, i) => {
+                el.classList.toggle('active', i === index);
+            });
+            isPlaying = false;
+            loadTrack(index, true);
+        }
+        
+        // SETTINGS
+        const settingLabels = {
+            darkmode: 'Dark mode',
+            effects: '3D effects',
+            particles: 'Particles',
+            autoplay: 'Autoplay',
+            blur: 'Background blur'
+        };
+
+        let settings = {
+            darkmode: false,
+            effects: true,
+            particles: true,
+            autoplay: true,
+            blur: true
+        };
+        
+        function toggleSetting(key) {
+            settings[key] = !settings[key];
+            
+            const toggle = document.querySelector(`#setting-${key} .toggle`);
+            if (toggle) {
+                toggle.classList.toggle('active', settings[key]);
+            }
+            
+            if (key === 'darkmode') {
+                document.body.classList.toggle('dark-mode', settings.darkmode);
+            } else if (key === 'effects') {
+                effectsEnabled = settings.effects;
+            } else if (key === 'particles') {
+                particlesEnabled = settings.particles;
+                if (particles) {
+                    particles.visible = settings.particles;
+                }
+            } else if (key === 'autoplay') {
+                if (settings.autoplay && tracks.length > 0) {
+                    loadTrack(currentTrackIndex);
+                }
+            } else if (key === 'blur') {
+                document.body.classList.toggle('no-blur', !settings.blur);
+            }
+            
+            const label = settingLabels[key] || key;
+            showNotification(`${label}: ${settings[key] ? 'ON' : 'OFF'}`);
+        }
+        
+        function setAccent(color) {
+            document.documentElement.style.setProperty('--accent', color);
+            showNotification('Accent color updated');
+        }
+        
+        function resetSettings() {
+            settings = { darkmode: false, effects: true, particles: true, autoplay: true, blur: true };
+            document.body.classList.remove('dark-mode', false);
+            document.body.classList.remove('no-blur');
+            effectsEnabled = true;
+            particlesEnabled = true;
+            if (particles) {
+                particles.visible = true;
+            }
+            
+            document.querySelectorAll('.toggle').forEach(t => {
+                const key = t.closest('.setting-row')?.id?.replace('setting-', '');
+                if (key && settings[key] !== undefined) {
+                    t.classList.toggle('active', settings[key]);
+                }
+            });
+            
+            showNotification('Settings restored to defaults');
+        }
+        
+        window.addEventListener('load', () => {
+             setTimeout(() => {
+                 const loader = document.getElementById('loader');
+                 if(loader) loader.classList.add('hidden');
+                 initWeather();
+            }, 500);
+        });
+
+        setTimeout(() => {
+             const loader = document.getElementById('loader');
+             if(loader && !loader.classList.contains('hidden')) {
+                console.warn('3D scene slowed loading; forcing loader off.');
+                loader.classList.add('hidden');
+            }
+        }, 4000);
+    </script>
+</body>
+</html>
